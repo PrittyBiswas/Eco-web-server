@@ -1,4 +1,4 @@
-require("dotenv").config();   // <-- IMPORTANT: Loads .env values
+require("dotenv").config(); 
 
 const express = require("express");
 const cors = require("cors");
@@ -7,15 +7,11 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 5000;
 
-// ------------------------
-// Middleware
-// ------------------------
+
 app.use(cors());
 app.use(express.json());
 
-// ------------------------
-// MongoDB URI
-// ------------------------
+
 const uri = process.env.MONGODB_URL;
 
 if (!uri) {
@@ -23,9 +19,6 @@ if (!uri) {
   process.exit(1);
 }
 
-// ------------------------
-// MongoDB client setup
-// ------------------------
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -39,16 +32,13 @@ let ChallengesCollection;
 let UserChallengesCollection;
 let EventCollection;
 
-// ------------------------
-// Default route
-// ------------------------
+
 app.get("/", (req, res) => {
   res.send("EcoTrack Server is Running");
 });
 
-// ------------------------
 // Connect to MongoDB
-// ------------------------
+
 async function connectDB() {
   try {
     await client.connect();
@@ -66,9 +56,7 @@ async function connectDB() {
 }
 connectDB();
 
-// ------------------------
-// Routes
-// ------------------------
+
 
 // Get all challenges
 app.get("/Challenges", async (req, res) => {
@@ -116,32 +104,7 @@ app.get("/UserChallenges", async (req, res) => {
   }
 });
 
-// Join a challenge
-app.post("/JoinChallenge", async (req, res) => {
-  try {
-    const { userId, challengeId } = req.body;
 
-    if (!userId || !challengeId) {
-      return res.status(400).send({
-        error: "userId and challengeId required",
-      });
-    }
-
-    const result = await UserChallengesCollection.insertOne({
-      userId,
-      challengeId,
-      joinedAt: new Date(),
-    });
-
-    res.send({
-      success: true,
-      message: "Joined successfully!",
-      result,
-    });
-  } catch (error) {
-    res.status(500).send({ error: error.message });
-  }
-});
 
 // Get all events
 app.get("/event", async (req, res) => {
@@ -211,9 +174,50 @@ app.delete("/event/:id", async (req, res) => {
   }
 });
 
-// ------------------------
+
+// Join a challenge
+app.post("/JoinChallenge", async (req, res) => {
+  try {
+    const { userId, challengeId } = req.body;
+
+    if (!userId || !challengeId) {
+      return res.status(400).send({ error: "userId and challengeId required" });
+    }
+
+    // Check if the user already joined this challenge
+    const alreadyJoined = await UserChallengesCollection.findOne({
+      userId,
+      challengeId,
+    });
+
+    if (alreadyJoined) {
+      return res.send({
+        success: false,
+        message: "You have already joined this challenge.",
+      });
+    }
+
+    // Insert new join record
+    const result = await UserChallengesCollection.insertOne({
+      userId,
+      challengeId,
+      joinedAt: new Date(),
+    });
+
+    res.send({
+      success: true,
+      message: "Joined successfully!",
+      result,
+    });
+  } catch (error) {
+    res.status(500).send({ error: error.message });
+  }
+});
+
+
 // Start server
-// ------------------------
+
+
 app.listen(port, () => {
   console.log(`🚀 EcoTrack Server running on port ${port}`);
 });
