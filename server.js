@@ -1,4 +1,4 @@
-require("dotenv").config(); 
+require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
@@ -7,11 +7,10 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 5000;
 
-
 app.use(cors());
 app.use(express.json());
 
-
+// MongoDB URI
 const uri = process.env.MONGODB_URL;
 
 if (!uri) {
@@ -31,34 +30,50 @@ const client = new MongoClient(uri, {
 let ChallengesCollection;
 let UserChallengesCollection;
 let EventCollection;
+let tipsCollection;
 
-
-app.get("/", (req, res) => {
-  res.send("EcoTrack Server is Running");
-});
-
-// Connect to MongoDB
-
+// Connect to MongoDB BEFORE starting server
 async function connectDB() {
   try {
     await client.connect();
-    console.log("✅ Connected to MongoDB");
+    console.log(" MongoDB Connected Successfully");
 
     const db = client.db("track_eco");
 
     ChallengesCollection = db.collection("Challenges");
     UserChallengesCollection = db.collection("UserChallenges");
     EventCollection = db.collection("event");
+    tipsCollection = db.collection("activities");
+
+    console.log("📦 Collections Loaded");
 
   } catch (error) {
-    console.error("❌ DB Connection Error:", error);
+    console.error("MongoDB Connection Failed:", error);
+    process.exit(1); 
   }
 }
-connectDB();
 
+// Middleware to ensure DB is ready
+function ensureDB(req, res, next) {
+  if (!ChallengesCollection) {
+    return res.status(500).send({
+      error: "Database not initialized. Please try again in a moment.",
+    });
+  }
+  next();
+}
 
+// Routes start here
+app.get("/", (req, res) => {
+  res.send("EcoTrack Server is Running");
+});
 
-// Get all challenges
+// Use middleware for all API routes
+
+app.use(ensureDB);
+
+// Challenges
+
 app.get("/Challenges", async (req, res) => {
   try {
     const result = await ChallengesCollection.find()
@@ -70,12 +85,10 @@ app.get("/Challenges", async (req, res) => {
   }
 });
 
-// Get single challenge by ID
 app.get("/Challenges/:id", async (req, res) => {
   try {
-    const id = req.params.id;
     const challenge = await ChallengesCollection.findOne({
-      _id: new ObjectId(id),
+      _id: new ObjectId(req.params.id),
     });
     res.send(challenge);
   } catch (error) {
@@ -83,18 +96,17 @@ app.get("/Challenges/:id", async (req, res) => {
   }
 });
 
-// Create challenge
 app.post("/Challenges", async (req, res) => {
   try {
-    const newChallenge = req.body;
-    const result = await ChallengesCollection.insertOne(newChallenge);
+    const result = await ChallengesCollection.insertOne(req.body);
     res.send(result);
   } catch (error) {
     res.status(500).send({ error: error.message });
   }
 });
 
-// Get all user challenges
+// User Challenges
+
 app.get("/UserChallenges", async (req, res) => {
   try {
     const result = await UserChallengesCollection.find().toArray();
@@ -105,25 +117,21 @@ app.get("/UserChallenges", async (req, res) => {
 });
 
 
+// Events 
 
-// Get all events
 app.get("/event", async (req, res) => {
   try {
-    const result = await EventCollection.find()
-      .sort({ date: 1 })
-      .toArray();
+    const result = await EventCollection.find().sort({ date: 1 }).toArray();
     res.send(result);
   } catch (error) {
     res.status(500).send({ error: error.message });
   }
 });
 
-// Get single event by ID
 app.get("/event/:id", async (req, res) => {
   try {
-    const id = req.params.id;
     const event = await EventCollection.findOne({
-      _id: new ObjectId(id),
+      _id: new ObjectId(req.params.id),
     });
     res.send(event);
   } catch (error) {
@@ -131,42 +139,31 @@ app.get("/event/:id", async (req, res) => {
   }
 });
 
-
-
-// Create event
 app.post("/event", async (req, res) => {
   try {
-    const newEvent = req.body;
-    const result = await EventCollection.insertOne(newEvent);
+    const result = await EventCollection.insertOne(req.body);
     res.send(result);
   } catch (error) {
     res.status(500).send({ error: error.message });
   }
 });
 
-// Update event
 app.put("/event/:id", async (req, res) => {
   try {
-    const id = req.params.id;
-    const updatedEvent = req.body;
-
     const result = await EventCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: updatedEvent }
+      { _id: new ObjectId(req.params.id) },
+      { $set: req.body }
     );
-
     res.send(result);
   } catch (error) {
     res.status(500).send({ error: error.message });
   }
 });
 
-// Delete event
 app.delete("/event/:id", async (req, res) => {
   try {
-    const id = req.params.id;
     const result = await EventCollection.deleteOne({
-      _id: new ObjectId(id),
+      _id: new ObjectId(req.params.id),
     });
     res.send(result);
   } catch (error) {
@@ -175,49 +172,10 @@ app.delete("/event/:id", async (req, res) => {
 });
 
 
-// Join a challenge
-app.post("/JoinChallenge", async (req, res) => {
-  try {
-    const { userId, challengeId } = req.body;
+// Start Server AFTER DB 
 
-    if (!userId || !challengeId) {
-      return res.status(400).send({ error: "userId and challengeId required" });
-    }
-
-    // Check if the user already joined this challenge
-    const alreadyJoined = await UserChallengesCollection.findOne({
-      userId,
-      challengeId,
-    });
-
-    if (alreadyJoined) {
-      return res.send({
-        success: false,
-        message: "You have already joined this challenge.",
-      });
-    }
-
-    // Insert new join record
-    const result = await UserChallengesCollection.insertOne({
-      userId,
-      challengeId,
-      joinedAt: new Date(),
-    });
-
-    res.send({
-      success: true,
-      message: "Joined successfully!",
-      result,
-    });
-  } catch (error) {
-    res.status(500).send({ error: error.message });
-  }
-});
-
-
-// Start server
-
-
-app.listen(port, () => {
-  console.log(`🚀 EcoTrack Server running on port ${port}`);
+connectDB().then(() => {
+  app.listen(port, () => {
+    console.log(` EcoTrack Server running on port ${port}`);
+  });
 });
