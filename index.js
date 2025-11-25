@@ -45,7 +45,7 @@ async function connectDB() {
     EventCollection = db.collection("event");
     tipsCollection = db.collection("activities");
 
-    console.log("📦 Collections Loaded");
+    console.log(" Collections Loaded");
 
   } catch (error) {
     console.error("MongoDB Connection Failed:", error);
